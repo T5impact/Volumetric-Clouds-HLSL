@@ -1,0 +1,10 @@
+#pragma kernel CopyTexCS
+
+Texture3D<float4> Tex;
+RWTexture3D<float4> RenderTex;
+
+[numthreads(8,8,8)]
+void CopyTexCS (uint3 id : SV_DispatchThreadID)
+{
+    RenderTex[id.xyz] = Tex[id.xyz];
+}

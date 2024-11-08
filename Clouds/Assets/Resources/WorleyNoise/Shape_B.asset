@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b506c2609180da40801951c60e9c752, type: 3}
+  m_Name: Shape_B
+  m_EditorClassIdentifier: 
+  seed: 5036
+  octave1Divisions: 20
+  octave2Divisions: 25
+  octave3Divisions: 36
+  persistance: 0.43
+  invert: 1

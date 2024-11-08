@@ -1,0 +1,350 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel WorleyCS
+#pragma kernel PerlinWorleyCS
+
+#include "Includes/Noise.compute"
+
+static const int numThreads = 8;
+
+RWTexture3D<float4> Result;
+StructuredBuffer<float3> octave1Points;
+StructuredBuffer<float3> octave2Points;
+StructuredBuffer<float3> octave3Points;
+
+static const int3 offsets[] =
+{
+    //// centre
+    //int3(0,0,0),
+    //// front face
+    //int3(0,0,1),
+    //int3(-1,1,1),
+    //int3(-1,0,1),
+    //int3(-1,-1,1),
+    //int3(0,1,1),
+    //int3(0,-1,1),
+    //int3(1,1,1),
+    //int3(1,0,1),
+    //int3(1,-1,1),
+    //// back face
+    //int3(0,0,-1),
+    //int3(-1,1,-1),
+    //int3(-1,0,-1),
+    //int3(-1,-1,-1),
+    //int3(0,1,-1),
+    //int3(0,-1,-1),
+    //int3(1,1,-1),
+    //int3(1,0,-1),
+    //int3(1,-1,-1),
+    //// ring around centre
+    //int3(-1,1,0),
+    //int3(-1,0,0),
+    //int3(-1,-1,0),
+    //int3(0,1,0),
+    //int3(0,-1,0),
+    //int3(1,1,0),
+    //int3(1,0,0),
+    //int3(1,-1,0)
+
+    //back layer
+    int3(-1,-1,-1),
+    int3(0,-1,-1),
+    int3(1,-1,-1),
+    int3(-1,0,-1),
+    int3(0,0,-1),
+    int3(1,0,-1),
+    int3(-1,1,-1),
+    int3(0,1,-1),
+    int3(1,1,-1),
+
+    //center layer
+    int3(-1,-1,0),
+    int3(0,-1,0),
+    int3(1,-1,0),
+    int3(-1,0,0),
+    int3(0,0,0),
+    int3(1,0,0),
+    int3(-1,1,0),
+    int3(0,1,0),
+    int3(1,1,0),
+
+    //front layer
+    int3(-1,-1,1),
+    int3(0,-1,1),
+    int3(1,-1,1),
+    int3(-1,0,1),
+    int3(0,0,1),
+    int3(1,0,1),
+    int3(-1,1,1),
+    int3(0,1,1),
+    int3(1,1,1)
+};
+
+int octave1Divisions;
+int octave2Divisions;
+int octave3Divisions;
+
+uint resolution;
+
+float maxDist1 = 1;
+float maxDist2 = 1;
+float maxDist3 = 1;
+
+float grid_scale;
+float scale;
+float3 offset;
+
+float4 channelMask;
+float persistence;
+float lacunarity;
+bool invertNoise;
+
+float Mod(float x, float y)
+{
+    return x - floor(x / y) * y;
+}
+float3 Mod(float3 x, float3 y)
+{
+    //return x - floor(x / y) * y;
+    return frac(x / y) * y;
+}
+
+float3 randomGrad(float3 uvw) {
+    uvw = float3(dot(uvw, float3(127.1, 311.7, 513.7)),
+                 dot(uvw, float3(269.5, 183.5, 396.5)), 
+                 dot(uvw, float3(421.3, 314.1, 119.5)));
+
+    return -1 + 2.0 * frac(sin(uvw) * 43758.5453123);
+}
+float3 wrap(float3 v, float s) {
+    return float3(v.x >= s - 0.001 ? v.x - s : v.x,
+                  v.y >= s - 0.001 ? v.y - s : v.y,
+                  v.z >= s - 0.001 ? v.z - s : v.z);
+}
+float noise3D(float3 input, float s) {
+    float sf = floor(s * grid_scale);
+    float3 uvw = (input) * grid_scale;
+    float3 gridIndex = floor(uvw);
+    float3 gridFract = frac(uvw);
+
+    float3 blur = smoothstep(0.0, 1.0, gridFract);
+
+    /*float3 blb = (float3)((gridIndex + int3(0.0, 0.0, 0.0)) % (int3)2);
+    float3 brb = (float3)((gridIndex + int3(1.0, 0.0, 0.0)) % (int3)2);
+    float3 tlb = (float3)((gridIndex + int3(0.0, 1.0, 0.0)) % (int3)2);
+    float3 trb = (float3)((gridIndex + int3(1.0, 1.0, 0.0)) % (int3)2);
+    float3 blf = (float3)((gridIndex + int3(0.0, 0.0, 1.0)) % (int3)2);
+    float3 brf = (float3)((gridIndex + int3(1.0, 0.0, 1.0)) % (int3)2);
+    float3 tlf = (float3)((gridIndex + int3(0.0, 1.0, 1.0)) % (int3)2);
+    float3 trf = (float3)((gridIndex + int3(1.0, 1.0, 1.0)) % (int3)2);*/
+    /*float3 blb = (float3)((gridIndex + int3(0.0, 0.0, 0.0)) % (int3)floor(grid_scale));
+    float3 brb = (float3)((gridIndex + int3(1.0, 0.0, 0.0)) % (int3)floor(grid_scale));
+    float3 tlb = (float3)((gridIndex + int3(0.0, 1.0, 0.0)) % (int3)floor(grid_scale));
+    float3 trb = (float3)((gridIndex + int3(1.0, 1.0, 0.0)) % (int3)floor(grid_scale));
+    float3 blf = (float3)((gridIndex + int3(0.0, 0.0, 1.0)) % (int3)floor(grid_scale));
+    float3 brf = (float3)((gridIndex + int3(1.0, 0.0, 1.0)) % (int3)floor(grid_scale));
+    float3 tlf = (float3)((gridIndex + int3(0.0, 1.0, 1.0)) % (int3)floor(grid_scale));
+    float3 trf = (float3)((gridIndex + int3(1.0, 1.0, 1.0)) % (int3)floor(grid_scale));*/
+    /*float3 blb = (gridIndex + int3(0.0, 0.0, 0.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 brb = (gridIndex + int3(1.0, 0.0, 0.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 tlb = (gridIndex + int3(0.0, 1.0, 0.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 trb = (gridIndex + int3(1.0, 1.0, 0.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 blf = (gridIndex + int3(0.0, 0.0, 1.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 brf = (gridIndex + int3(1.0, 0.0, 1.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 tlf = (gridIndex + int3(0.0, 1.0, 1.0) + (int)scale + 1) % ((int)scale) + 0.0001;
+    float3 trf = (gridIndex + int3(1.0, 1.0, 1.0) + (int)scale + 1) % ((int)scale) + 0.0001;*/
+    /*float3 blb = wrap(gridIndex + float3(0.0, 0.0, 0.0), (s * grid_scale));
+    float3 brb = wrap(gridIndex + float3(1.0, 0.0, 0.0), (s * grid_scale));
+    float3 tlb = wrap(gridIndex + float3(0.0, 1.0, 0.0), (s * grid_scale));
+    float3 trb = wrap(gridIndex + float3(1.0, 1.0, 0.0), (s * grid_scale));
+    float3 blf = wrap(gridIndex + float3(0.0, 0.0, 1.0), (s * grid_scale));
+    float3 brf = wrap(gridIndex + float3(1.0, 0.0, 1.0), (s * grid_scale));
+    float3 tlf = wrap(gridIndex + float3(0.0, 1.0, 1.0), (s * grid_scale));
+    float3 trf = wrap(gridIndex + float3(1.0, 1.0, 1.0), (s * grid_scale));*/
+    float3 blb = (gridIndex + float3(0.0, 0.0, 0.0)) % (s * grid_scale);
+    float3 brb = (gridIndex + float3(1.0, 0.0, 0.0)) % (s * grid_scale);
+    float3 tlb = (gridIndex + float3(0.0, 1.0, 0.0)) % (s * grid_scale);
+    float3 trb = (gridIndex + float3(1.0, 1.0, 0.0)) % (s * grid_scale);
+    float3 blf = (gridIndex + float3(0.0, 0.0, 1.0)) % (s * grid_scale);
+    float3 brf = (gridIndex + float3(1.0, 0.0, 1.0)) % (s * grid_scale);
+    float3 tlf = (gridIndex + float3(0.0, 1.0, 1.0)) % (s * grid_scale);
+    float3 trf = (gridIndex + float3(1.0, 1.0, 1.0)) % (s * grid_scale);
+    /*float3 blb = Mod(gridIndex + float3(0.0, 0.0, 0.0), (float3)(s * grid_scale));
+    float3 brb = Mod(gridIndex + float3(1.0, 0.0, 0.0), (float3)(s * grid_scale));
+    float3 tlb = Mod(gridIndex + float3(0.0, 1.0, 0.0), (float3)(s * grid_scale));
+    float3 trb = Mod(gridIndex + float3(1.0, 1.0, 0.0), (float3)(s * grid_scale));
+    float3 blf = Mod(gridIndex + float3(0.0, 0.0, 1.0), (float3)(s * grid_scale));
+    float3 brf = Mod(gridIndex + float3(1.0, 0.0, 1.0), (float3)(s * grid_scale));
+    float3 tlf = Mod(gridIndex + float3(0.0, 1.0, 1.0), (float3)(s * grid_scale));
+    float3 trf = Mod(gridIndex + float3(1.0, 1.0, 1.0), (float3)(s * grid_scale));*/
+    /*float3 blb = gridIndex + float3(0.0, 0.0, 0.0);
+    float3 brb = gridIndex + float3(1.0, 0.0, 0.0);
+    float3 tlb = gridIndex + float3(0.0, 1.0, 0.0);
+    float3 trb = gridIndex + float3(1.0, 1.0, 0.0);
+    float3 blf = gridIndex + float3(0.0, 0.0, 1.0);
+    float3 brf = gridIndex + float3(1.0, 0.0, 1.0);
+    float3 tlf = gridIndex + float3(0.0, 1.0, 1.0);
+    float3 trf = gridIndex + float3(1.0, 1.0, 1.0);*/
+
+    float3 gradBLB = randomGrad(blb);
+    float3 gradBRB = randomGrad(brb);
+    float3 gradTLB = randomGrad(tlb);
+    float3 gradTRB = randomGrad(trb);
+    float3 gradBLF = randomGrad(blf);
+    float3 gradBRF = randomGrad(brf);
+    float3 gradTLF = randomGrad(tlf);
+    float3 gradTRF = randomGrad(trf);
+
+    float3 distToPixelFromBLB = gridFract - float3(0.0, 0.0, 0.0);
+    float3 distToPixelFromBRB = gridFract - float3(1.0, 0.0, 0.0);
+    float3 distToPixelFromTLB = gridFract - float3(0.0, 1.0, 0.0);
+    float3 distToPixelFromTRB = gridFract - float3(1.0, 1.0, 0.0);
+    float3 distToPixelFromBLF = gridFract - float3(0.0, 0.0, 1.0);
+    float3 distToPixelFromBRF = gridFract - float3(1.0, 0.0, 1.0);
+    float3 distToPixelFromTLF = gridFract - float3(0.0, 1.0, 1.0);
+    float3 distToPixelFromTRF = gridFract - float3(1.0, 1.0, 1.0);
+
+    float dotBLB = dot(gradBLB, distToPixelFromBLB);
+    float dotBRB = dot(gradBRB, distToPixelFromBRB);
+    float dotTLB = dot(gradTLB, distToPixelFromTLB);
+    float dotTRB = dot(gradTRB, distToPixelFromTRB);
+    float dotBLF = dot(gradBLF, distToPixelFromBLF);
+    float dotBRF = dot(gradBRF, distToPixelFromBRF);
+    float dotTLF = dot(gradTLF, distToPixelFromTLF);
+    float dotTRF = dot(gradTRF, distToPixelFromTRF);
+
+    return lerp(
+        lerp(
+            lerp(dotBLB, dotBRB, blur.x),
+            lerp(dotTLB, dotTRB, blur.x),
+            blur.y
+        ),
+        lerp(
+            lerp(dotBLF, dotBRF, blur.x),
+            lerp(dotTLF, dotTRF, blur.x),
+            blur.y
+        ),
+        blur.z
+    ) + 0.5;
+}
+
+int get1DIndex(int3 id, int divPerAxis) {
+    return id.x + divPerAxis * (id.y + id.z * divPerAxis);
+}
+float getSqrDst(float3 vec1, float3 vec2) {
+    float3 offset = vec2 - vec1;
+    return dot(offset, offset);
+}
+int getMinComponent(int3 vec) {
+    return min(vec.x, min(vec.y, vec.z));
+}
+int getMaxComponent(int3 vec) {
+    return max(vec.x, max(vec.y, vec.z));
+}
+//float wrap(int v, int period) {
+//    if (v < 0)
+//        return (float)((v % period) + period);
+//    return (float)(v % period);
+//}
+//
+//float3 wrapFloat3(float3 v, int period) {
+//    return float3(
+//        wrap(v.x * period, period) / period,
+//        wrap(v.y * period, period) / period,
+//        wrap(v.z * period, period) / period
+//        );
+//}
+
+float worleyNoise(StructuredBuffer<float3> points, int cellsPerAxis, float maxDist, float3 samplePos, int3 id) {
+    float minSqrDst = 1;
+
+    int3 cellID = floor(samplePos * cellsPerAxis);
+
+    float cellSize = (float)1 / cellsPerAxis;
+
+    for (int offsetIndex = 0; offsetIndex < 27; offsetIndex++)
+    {
+        int3 currentId = cellID + offsets[offsetIndex];
+        float3 currentCellCorner = currentId * cellSize;
+        
+        if (getMinComponent(currentId) == -1 || getMaxComponent(currentId) == cellsPerAxis) {
+            int3 wrappedId = (currentId + cellsPerAxis) % (uint3)cellsPerAxis;
+            float3 wrappedCellCorner = wrappedId * cellSize;
+            float3 wrappedPoint = points[get1DIndex(wrappedId, cellsPerAxis)] - wrappedCellCorner + currentCellCorner;
+
+            minSqrDst = min(minSqrDst, getSqrDst(samplePos, wrappedPoint));
+        }
+        else {
+            float3 currentSamplePoint = points[get1DIndex(currentId, cellsPerAxis)];
+            minSqrDst = min(minSqrDst, getSqrDst(samplePos, currentSamplePoint));
+        }
+    }
+
+    return max(0, min(1, sqrt(minSqrDst) / maxDist));
+}
+
+float perlinWorley(StructuredBuffer<float3> points, int cellsPerAxis, float maxDist, float3 samplePos, float lacunarity, int3 id) {
+    float worleyOffset = worleyNoise(points, cellsPerAxis, maxDist, samplePos, id);
+
+    //float3 noisePos = (samplePos + offset) * (scale + worleyOffset * 0.001) * lacunarity;
+    float3 noisePos = (samplePos + offset) * (scale);// *lacunarity;
+    
+    //float noise = snoise_tile(noisePos, 1);
+    //float noise = snoise(wrapFloat3(noisePos, 16));
+    float noise = noise3D(noisePos, (scale));
+    //float noise = noise3D((samplePos + offset) * scale);
+
+    return noise;
+}
+
+[numthreads(numThreads, numThreads, numThreads)]
+void WorleyCS(uint3 id : SV_DispatchThreadID)
+{
+    float3 pos = id / (float)resolution;
+
+    float octave1 = worleyNoise(octave1Points, octave1Divisions, maxDist1, pos, id);
+    float octave2 = worleyNoise(octave2Points, octave2Divisions, maxDist2, pos, id);
+    float octave3 = worleyNoise(octave3Points, octave3Divisions, maxDist3, pos, id);
+
+    float totalNoise = 0;
+
+    totalNoise += octave1;
+    totalNoise += octave2 * persistence;
+    totalNoise += octave3 * persistence * persistence;
+
+    if (invertNoise)
+        totalNoise = 1 - totalNoise;
+    
+    //Allow for easy modification of existing texture by only changing what channelMask requires
+    Result[id] = Result[id] * (1 - channelMask) + totalNoise * channelMask;
+    //Result[id] = Result[id] * (1 - channelMask) + totalNoise * channelMask;
+    //Result[id] = float4(totalNoise, totalNoise, totalNoise, 1);
+    //Result[id] = float4(pointPos.xyz, 1);
+}
+
+[numthreads(numThreads, numThreads, numThreads)]
+void PerlinWorleyCS(uint3 id : SV_DispatchThreadID)
+{
+    float3 pos = id / (float)resolution;
+
+    float octave1 = perlinWorley(octave1Points, octave1Divisions, maxDist1, pos, 1, id);
+    float octave2 = perlinWorley(octave2Points, octave2Divisions, maxDist2, pos, lacunarity, id);
+    float octave3 = perlinWorley(octave3Points, octave3Divisions, maxDist3, pos, lacunarity * lacunarity, id);
+
+    float totalNoise = 0;
+
+    totalNoise += octave1;
+    //totalNoise += octave2 * persistence;
+    //totalNoise += octave3 * persistence * persistence;
+
+    //totalNoise = noise3D(pos);
+
+    if (invertNoise)
+        totalNoise = 1 - totalNoise;
+
+    //Allow for easy modification of existing texture by only changing what channelMask requires
+    Result[id] = Result[id] * (1 - channelMask) + totalNoise * channelMask;
+    //Result[id] = Result[id] * (1 - channelMask) + (3.0 % 2.5) * channelMask;
+    //Result[id] = Result[id] * (1 - channelMask) + totalNoise * channelMask;
+    //Result[id] = float4(totalNoise, totalNoise, totalNoise, 1);
+    //Result[id] = float4(pointPos.xyz, 1);
+}
