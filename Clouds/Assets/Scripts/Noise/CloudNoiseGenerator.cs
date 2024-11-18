@@ -16,9 +16,12 @@ public class CloudNoiseGenerator : MonoBehaviour
     public enum CloudNoiseType { Shape, Detail }
     public enum TextureChannel { R, G, B, A }
 
+    public CloudsController controller;
+
     [Header("Editor Settings")]
     public CloudNoiseType activeTextureType;
     public TextureChannel activeChannel;
+
     //public bool autoUpdate;
     //public bool logComputeTime;
 
@@ -89,7 +92,8 @@ public class CloudNoiseGenerator : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+        UpdateNoise();
+        controller.InitializeClouds();
     }
 
     // Update is called once per frame
@@ -126,7 +130,7 @@ public class CloudNoiseGenerator : MonoBehaviour
             //noiseCompute.SetTexture(0, "Result", shapeTexture);
             //var minMaxBuffer = CreateBuffer(new int[] { int.MaxValue, 0 }, sizeof(int), "minMax", 0);
             int kernel = 0;
-            if (activeChannel == TextureChannel.R && activeTextureType == CloudNoiseType.Shape) kernel = 1;
+            //if (activeChannel == TextureChannel.R && activeTextureType == CloudNoiseType.Shape) kernel = 1;
             UpdateWorleyNoise(activeSettings, kernel);
             noiseCompute.SetTexture(kernel, "Result", ActiveTexture);
             //var noiseValuesBuffer = CreateBuffer (activeNoiseValues, sizeof (float) * 4, "values");
@@ -296,7 +300,7 @@ public class CloudNoiseGenerator : MonoBehaviour
 
     public void SaveRT3DToTexture3DAsset(RenderTexture rt3D, string saveName)
     {
-        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        /*string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
         saveName = sceneName + "_" + saveName;
         int width = rt3D.width, height = rt3D.height, depth = rt3D.volumeDepth;
         var a = new NativeArray<R16>(width * height * depth * 4, Allocator.Persistent, NativeArrayOptions.UninitializedMemory); //change if format is not 8 bits (i was using R8_UNorm) (create a struct with 4 bytes etc)
@@ -309,7 +313,7 @@ public class CloudNoiseGenerator : MonoBehaviour
             AssetDatabase.SaveAssetIfDirty(output);
             a.Dispose();
             rt3D.Release();
-        });
+        });*/
     }
 
     public void ManualUpdate()

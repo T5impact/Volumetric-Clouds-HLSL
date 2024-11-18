@@ -6,24 +6,28 @@ using UnityEngine.Rendering.Universal;
 public class CloudsBlitPass : ScriptableRenderPass
 {
     private Material cloudsMaterial;
-    private RenderTextureDescriptor textureDescriptor;
-    private RTHandle textureHandle;
+    //private RenderTextureDescriptor textureDescriptor;
+    //private RTHandle textureHandle;
 
     public CloudsBlitPass(Material material)
     {
         cloudsMaterial = material;
         renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
-        textureDescriptor = new RenderTextureDescriptor(Screen.width, Screen.height, RenderTextureFormat.Default, 0);
+        //textureDescriptor = new RenderTextureDescriptor(Screen.width, Screen.height, RenderTextureFormat.Default, 0);
+    }
+    public void UpdateMaterial(Material material)
+    {
+        cloudsMaterial = material;
     }
 
     public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
     {
-        //Set the cloud texture size to be the same as the camera target size.
+        /*//Set the cloud texture size to be the same as the camera target size.
         textureDescriptor.width = cameraTextureDescriptor.width;
         textureDescriptor.height = cameraTextureDescriptor.height;
 
         //Check if the descriptor has changed, and reallocate the RTHandle if necessary.
-        RenderingUtils.ReAllocateIfNeeded(ref textureHandle, textureDescriptor);
+        RenderingUtils.ReAllocateIfNeeded(ref textureHandle, textureDescriptor);*/
     }
 
     public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -33,7 +37,15 @@ public class CloudsBlitPass : ScriptableRenderPass
 
         RTHandle cameraTargetHandle = renderingData.cameraData.renderer.cameraColorTargetHandle;
 
-        Blitter.BlitCameraTexture(cmd, cameraTargetHandle, cameraTargetHandle, cloudsMaterial, 0);
+        if (cameraTargetHandle != null && cloudsMaterial != null && cmd != null)
+        {
+            Blitter.Cleanup();
+            Blitter.BlitCameraTexture(cmd, cameraTargetHandle, cameraTargetHandle, cloudsMaterial, 0);
+
+            context.ExecuteCommandBuffer(cmd);
+            cmd.Clear();
+            CommandBufferPool.Release(cmd);
+        }
         // Blit from the camera target to the temporary render texture,
         // using the first shader pass.
         //Blit(cmd, cameraTargetHandle, textureHandle, material, 0);
@@ -43,9 +55,6 @@ public class CloudsBlitPass : ScriptableRenderPass
         //Debug.Log("Currently executing");
 
         //Execute the command buffer and release it back to the pool.
-        context.ExecuteCommandBuffer(cmd);
-        cmd.Clear();
-        CommandBufferPool.Release(cmd);
     }
 
    /* public void Dispose()

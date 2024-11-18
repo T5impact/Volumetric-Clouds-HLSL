@@ -12,9 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b506c2609180da40801951c60e9c752, type: 3}
   m_Name: Detail_R
   m_EditorClassIdentifier: 
-  seed: 4116
-  octave1Divisions: 18
-  octave2Divisions: 27
-  octave3Divisions: 35
+  seed: 2733
+  octave1Divisions: 3
+  octave2Divisions: 6
+  octave3Divisions: 8
   persistance: 0.39
+  lacunarity: 0
+  scale: 0
+  offset: {x: 0, y: 0, z: 0}
   invert: 1

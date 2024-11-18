@@ -13,8 +13,11 @@ MonoBehaviour:
   m_Name: Detail_G
   m_EditorClassIdentifier: 
   seed: 4116
-  octave1Divisions: 28
-  octave2Divisions: 35
-  octave3Divisions: 44
+  octave1Divisions: 6
+  octave2Divisions: 11
+  octave3Divisions: 15
   persistance: 0.5
-  invert: 0
+  lacunarity: 0
+  scale: 0
+  offset: {x: 0, y: 0, z: 0}
+  invert: 1

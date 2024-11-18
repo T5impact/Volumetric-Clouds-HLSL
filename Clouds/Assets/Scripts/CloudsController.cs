@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.UI;
 
 public class CloudsController : MonoBehaviour
 {
@@ -12,20 +13,36 @@ public class CloudsController : MonoBehaviour
     [SerializeField] Texture2D blueNoiseTex;
     [SerializeField] Material cloudsMat;
 
+    [Header("Input Settings")]
+    [SerializeField] Slider cloudDensity;
+    [SerializeField] Slider cloudCoverage;
+    [SerializeField] Slider cloudScale;
+    [SerializeField] Slider cloudTypeInput;
+    [SerializeField] Slider cloudSpeed;
+
+    [Header("Container Settings")]
+    [SerializeField] float atmosphereRadius = 100;
+    [SerializeField] float planetRadius = 1000;
+
     [Header("Cloud Settings")]
+    [SerializeField] Vector2 cloudsMinMax = new Vector2(10, 100);
     [SerializeField] float marchStepSize = 10;
     [SerializeField] Vector2Int minMaxMarches = new Vector2Int(5, 10);
+    [SerializeField] Vector2 marchDensityThresholds = new Vector2(0f, 0.2f);
     [SerializeField] float lightMarchStepSize = 10;
     [SerializeField] Vector2Int minMaxLightMarches = new Vector2Int(5, 10);
+    [SerializeField] [Range(0,1)] float coneSamplingScale = 0.5f;
+    [SerializeField] float coneSamplingRadius = 3;
     [SerializeField] float densityOffset = 0;
     [SerializeField] float densityScale = 0.1f;
     [SerializeField] float rayOffsetStrength = .1f;
+    [SerializeField] Vector3 cloudType = new Vector3(1,0,0);
     [Header("Shape Settings")]
-    [SerializeField] float shapeScale = 1;
+    [SerializeField] Vector3 shapeScale = new Vector3(1, 1, 1);
     [SerializeField] Vector3 shapeOffset = new Vector3(0,0,0);
     [SerializeField] Vector4 shapeWeights = new Vector4(1f, 0.7f, 0.5f, 0.3f);
     [Header("Detail Settings")]
-    [SerializeField] float detailScale = 1;
+    [SerializeField] Vector3 detailScale = new Vector3(1,1,1);
     [SerializeField] Vector3 detailOffset = new Vector3(0, 0, 0);
     [SerializeField] Vector4 detailWeights = new Vector4(1f, 0.7f, 0.5f, 0.3f);
     [SerializeField] float detailWeight = 0.1f;
@@ -36,6 +53,10 @@ public class CloudsController : MonoBehaviour
     [SerializeField] [Range(0, 1)] float backScattering;
     [SerializeField] [Range(0, 1)] float baseBrightness;
     [SerializeField] [Range(0, 1)] float phaseFactor;
+    [Header("Time Settings")]
+    [SerializeField] float timeScale = 1;
+    [SerializeField] float baseSpeed = 1;
+    [SerializeField] float detailSpeed = 1;
 
     CloudsBlitPass cloudsBlitPass;
     // Start is called before the first frame update
@@ -57,15 +78,47 @@ public class CloudsController : MonoBehaviour
             //print("Has Render Tex: " + noiseVisualizerMat.HasTexture("_RendTex"));
             noiseVisualizerMat.SetTexture("_RendTex", ActiveTexture);
         }*/
+
+        if(Application.isPlaying || Application.isEditor)
+        {
+            timeScale = cloudSpeed.value;
+            switch((int)cloudTypeInput.value)
+            {
+                case 1:
+                    cloudType = new Vector3(1, 0, 0);
+                    break;
+                case 2:
+                    cloudType = new Vector3(0, 1, 0);
+                    break;
+                case 3:
+                    cloudType = new Vector3(0, 0, 1);
+                    break;
+            }
+            shapeScale = Vector3.one * cloudScale.value;
+            densityOffset = cloudCoverage.value;
+            densityScale = cloudDensity.value;
+        }
+
+        cloudsMat.SetFloat("timeScale", timeScale);
+        cloudsMat.SetFloat("baseSpeed", baseSpeed);
+        cloudsMat.SetFloat("detailSpeed", detailSpeed);
+
+        cloudsMat.SetVector("clouds_minMax", cloudsMinMax);
+        cloudsMat.SetVector("cloudType", cloudType);
+
         cloudsMat.SetVector("boundsMin", cloudsContainer.position - cloudsContainer.localScale / 2);
         cloudsMat.SetVector("boundsMax", cloudsContainer.position + cloudsContainer.localScale / 2);
-        cloudsMat.SetFloat("shapeScale", shapeScale);
+        cloudsMat.SetVector("shapeScale", shapeScale);
         cloudsMat.SetVector("shapeOffset", shapeOffset);
         cloudsMat.SetVector("shapeWeights", shapeWeights);
-        cloudsMat.SetFloat("detailScale", detailScale);
+        cloudsMat.SetVector("detailScale", detailScale);
         cloudsMat.SetVector("detailOffset", detailOffset);
         cloudsMat.SetVector("detailWeights", detailWeights);
         cloudsMat.SetFloat("detailWeight", detailWeight);
+
+        cloudsMat.SetFloat("atmosphereRadius", atmosphereRadius + planetRadius);
+        cloudsMat.SetFloat("planetRadius", planetRadius);
+        cloudsMat.SetVector("center", cloudsContainer.position);
 
         cloudsMat.SetFloat("densityOffset", densityOffset);
         cloudsMat.SetFloat("densityScale", densityScale);
@@ -73,14 +126,18 @@ public class CloudsController : MonoBehaviour
         cloudsMat.SetFloat("lightAbsorbtionTowardLight", lightAbsorbtionTowardLight);
         cloudsMat.SetFloat("lightAbsorbtionThroughCloud", lightAbsorbtionThroughCloud);
 
-        cloudsMat.SetFloat("rayOffsetStrength", rayOffsetStrength);
+        cloudsMat.SetFloat("rayOffsetStrength", Mathf.Max(0, rayOffsetStrength));
 
         cloudsMat.SetVector("phaseParameters", new Vector4(forwardScattering, backScattering, baseBrightness, phaseFactor));
 
         cloudsMat.SetFloat("marchStepSize", marchStepSize);
         cloudsMat.SetVector("minMaxMarches", (Vector2)minMaxMarches);
+        cloudsMat.SetVector("marchDensityThresholds", marchDensityThresholds);
         cloudsMat.SetFloat("lightMarchStepSize", lightMarchStepSize);
         cloudsMat.SetVector("minMaxLightMarches", (Vector2)minMaxLightMarches);
+
+        cloudsMat.SetFloat("coneSamplingScale", coneSamplingScale);
+        cloudsMat.SetFloat("coneSamplingRadius", coneSamplingRadius);
 
         cloudsMat.SetVector("lightPos", mainLight.position);
 
@@ -92,7 +149,10 @@ public class CloudsController : MonoBehaviour
             cloudsMat.SetTexture("_DetailTexture", noiseGenerator.detailTexture);
         }
 
-        cloudsBlitPass = new CloudsBlitPass(cloudsMat);
+        if (cloudsBlitPass != null) 
+            cloudsBlitPass.UpdateMaterial(cloudsMat);
+        else
+            cloudsBlitPass = new CloudsBlitPass(cloudsMat);
     }
     private void OnEnable()
     {

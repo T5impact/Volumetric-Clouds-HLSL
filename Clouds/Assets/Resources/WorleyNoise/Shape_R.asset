@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: Shape_R
   m_EditorClassIdentifier: 
   seed: 4116
-  octave1Divisions: 7
-  octave2Divisions: 11
-  octave3Divisions: 18
+  octave1Divisions: 4
+  octave2Divisions: 6
+  octave3Divisions: 8
   persistance: 0.13
   lacunarity: 3
   scale: 2.28
   offset: {x: 11.75, y: 0, z: 0}
-  invert: 0
+  invert: 1
